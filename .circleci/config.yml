@@ -7,7 +7,7 @@ executors:
       - image: circleci/node:13.8.0
   python:
     docker:
-      - image: python:3.10.0-alpine
+      - image: python:3.9.16-alpine
   aws:
     docker:
       - image: amazon/aws-cli
@@ -117,7 +117,7 @@ jobs:
       - run:
           name: Configure server
           working_directory: .circleci/ansible
-          command: ansible-playbook -i inventory configure-server.yml -vv
+          command: ansible-playbook -i inventory configure-server.yml -vv -c paramiko
 
   deploy-backend:
     executor: python
