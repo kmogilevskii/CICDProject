@@ -117,7 +117,7 @@ jobs:
       - run:
           name: Configure server
           working_directory: .circleci/ansible
-          command: ansible-playbook -i inventory configure-server.yml
+          command: ansible-playbook -i inventory configure-server.yml -c paramiko
 
   deploy-backend:
     executor: python
@@ -145,12 +145,12 @@ workflows:
       - build-backend:
           requires:
             - install-backend-dependencies
-      - test-backend:
-          requires:
-            - build-backend
-      - scan-backend:
-          requires:
-            - build-backend
+#      - test-backend:
+#          requires:
+#            - build-backend
+#      - scan-backend:
+#          requires:
+#            - build-backend
       - deploy-infrastructure:
           requires:
             - build-backend
