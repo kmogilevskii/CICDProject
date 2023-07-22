@@ -117,7 +117,7 @@ jobs:
       - run:
           name: Configure server
           working_directory: .circleci/ansible
-          command: ansible-playbook -i inventory configure-server.yml -vvvv -u ubuntu
+          command: ansible-playbook -i inventory configure-server.yml -vv
 
   deploy-backend:
     executor: python
