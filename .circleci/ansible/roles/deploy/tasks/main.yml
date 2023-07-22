@@ -1,0 +1,11 @@
+- name: "Archive Backend"
+  become: yes
+  synchronize:
+    src: ../../backend-artifact.tar.gz
+    dest: /home/ubuntu/
+
+- name: "Extract Backend"
+  become: yes
+  unarchive:
+    src: /home/ubuntu/backend-artifact.tar.gz
+    dest: /home/ubuntu/backend

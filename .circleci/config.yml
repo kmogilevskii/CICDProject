@@ -1,0 +1,164 @@
+version: 2.1
+
+
+executors:
+  node:
+    docker:
+      - image: circleci/node:13.8.0
+  python:
+    docker:
+      - image: python:3.10.0-alpine
+  aws:
+    docker:
+      - image: amazon/aws-cli
+
+jobs:
+
+  install-backend-dependencies:
+    executor: node
+    steps:
+      - checkout
+      - run:
+          name: npm install backend
+          working_directory: backend
+          command: npm install
+      - persist_to_workspace:
+          root: .
+          paths:
+            - backend/node_modules
+
+  build-backend:
+    executor: node
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: npm run build backend
+          working_directory: backend
+          command: npm run build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - backend/dist
+
+  test-backend:
+    executor: node
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install junit coverage reporter
+          working_directory: backend
+          command: npm install --save-dev jest-junit
+      - run:
+          name: Run tests with JUnit as reporter
+          working_directory: backend
+          command: npm test -- --ci --runInBand --reporters=default --reporters=jest-junit
+          environment:
+            JEST_JUNIT_OUTPUT_DIR: test_results
+      - store_test_results:
+          path: backend/test_results
+
+  scan-backend:
+    executor: node
+    steps:
+      - checkout
+      - run:
+          name: Check Backend against security vulnerabilities
+          working_directory: backend
+          command: npm install && npm audit fix --audit-level=critical --force &&  npm audit fix --audit-level=critical --force && npm audit --audit-level=critical
+
+  deploy-infrastructure:
+    executor: aws
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: yum install -y tar gzip # required for the persist_to_workspace
+      - run:
+          name: Deploy Backend Infrastructure
+          working_directory: .circleci/files
+          command: |
+            aws cloudformation deploy \
+              --template-file backend.yml \
+              --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}" \
+              --tags project=udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}
+      - run:
+          name: Add backend ip to ansible inventory
+          working_directory: .circleci/ansible
+          command: |
+            BACKEND_IP=$(aws ec2 describe-instances \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --filters "Name=tag:project,Values=udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --output text)
+            
+            echo $BACKEND_IP >> inventory
+            cat inventory
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .circleci/ansible/inventory
+
+  configure-infrastructure:
+    executor: python
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["e0:bd:8d:88:d7:8f:9d:c2:5f:6d:c5:cd:da:22:30:9a"]
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install dependencies
+          working_directory: .circleci/ansible
+          command: apk add --update ansible
+      - run:
+          name: Configure server
+          working_directory: .circleci/ansible
+          command: ansible-playbook -i inventory configure-server.yaml
+
+  deploy-backend:
+    executor: python
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["e0:bd:8d:88:d7:8f:9d:c2:5f:6d:c5:cd:da:22:30:9a"]
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install dependencies
+          working_directory: /tmp
+          command: |
+            apk add --update ansible curl rsync openssh nodejs npm jq
+            pip install awscli
+      - run:
+          name: Deploy backend
+          working_directory: .circleci/ansible
+          command: ansible-playbook -i inventory deploy-server.yml -vv
+
+workflows:
+  default:
+    jobs:
+      - install-backend-dependencies
+      - build-backend:
+          requires:
+            - install-backend-dependencies
+      - test-backend:
+          requires:
+            - build-backend
+      - scan-backend:
+          requires:
+            - build-backend
+      - deploy-infrastructure:
+          filters:
+            branches:
+              only:
+                - main
+      - configure-infrastructure:
+          requires:
+            - deploy-infrastructure
+      - deploy-backend:
+          requires:
+            - configure-infrastructure
