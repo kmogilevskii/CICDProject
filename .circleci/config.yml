@@ -152,6 +152,8 @@ workflows:
           requires:
             - build-backend
       - deploy-infrastructure:
+          requires:
+            - build-backend
           filters:
             branches:
               only:
